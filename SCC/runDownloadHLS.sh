@@ -1,6 +1,10 @@
 #!/bin/bash -l
 #$ -j y
 
+# Get the base directory path based on the location of this launching script.
+MSLSP_BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. &> /dev/null && pwd )"
+echo "Base directory: $BASE_DIR"
+
 
 tile=$1
 baseDir=$2
@@ -18,7 +22,7 @@ do
    
    imgSD="${y}-01-01"
    imgED="${y}-12-31"
-   /projectnb/modislc/users/aliceni/MSLSP/MSLSP/SCC/getHLS.sh $tile $imgSD $imgED $imgDir
+   $MSLSP_BASE_DIR/SCC/getHLS.sh $tile $imgSD $imgED $imgDir
    
 done
 

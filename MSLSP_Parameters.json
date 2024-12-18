@@ -38,12 +38,12 @@
   
     "SCC":{
     
-    "workDir":"/projectnb/modislc/users/aliceni/MSLSP/output/S10/",
-    "logDir":"/projectnb/modislc/users/aliceni/MSLSP/runLogs/",
-    "dataDir":"/projectnb/modislc/users/aliceni/MSLSP/input/",
-    "rScript":"/projectnb/modislc/users/aliceni/MSLSP/MSLSP_Script_dev.R",
-    "rFunctions":"/projectnb/modislc/users/aliceni/MSLSP/MSLSP_Functions_dev.R",
-    "productTable":"/projectnb/modislc/users/aliceni/MSLSP/MSLSP_Layers.csv",
+    "workDir":"output/S10/",
+    "logDir":"runLogs/",
+    "dataDir":"input/",
+    "rScript":"MSLSP_Script_dev.R",
+    "rFunctions":"MSLSP_Functions_dev.R",
+    "productTable":"MSLSP_Layers.csv",
     
     "numCores":16,
     "numChunks":48,

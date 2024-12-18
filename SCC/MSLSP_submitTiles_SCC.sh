@@ -1,15 +1,19 @@
 module load jq
 
-parameters="/projectnb/modislc/users/aliceni/MSLSP/MSLSP_Parameters.json"
-tileList="/projectnb/modislc/users/aliceni/MSLSP/SCC/tileLists/arizona.txt"
+# Get the base directory path based on the location of this launching script.
+MSLSP_BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. &> /dev/null && pwd )"
+echo "Base directory: $MSLSP_BASE_DIR"
+
+parameters="$MSLSP_BASE_DIR/MSLSP_Parameters.json"
+tileList="$MSLSP_BASE_DIR/SCC/tileLists/arizona.txt"
 
 numCores=$( jq .SCC.numCores $parameters )
-workDir=$( jq --raw-output .SCC.workDir $parameters )
-dataDir=$( jq --raw-output .SCC.dataDir $parameters )
+workDir=$MSLSP_BASE_DIR/$( jq --raw-output .SCC.workDir $parameters )
+dataDir=$MSLSP_BASE_DIR/$( jq --raw-output .SCC.dataDir $parameters )
 
 jobTime="$(date +%Y_%m_%d_%H_%M_%S)"
 
-logDir=$( jq --raw-output .SCC.logDir $parameters ) 
+logDir=$MSLSP_BASE_DIR/$( jq --raw-output .SCC.logDir $parameters ) 
 mkdir -p $logDir
 
 if $(jq .SCC.runS10 $parameters )
@@ -55,7 +59,7 @@ then
         downloadArg="-l download"
         imgStartYr=$(( $( jq .setup.imgStartYr $parameters ) - 1 ))
         imgEndYr=$(( $( jq .setup.imgEndYr $parameters ) + 1 ))
-        qsub $nameArg $logArg_download $downloadArg /projectnb/modislc/users/aliceni/MSLSP/SCC/runDownloadHLS.sh $tile $baseDir $imgStartYr $imgEndYr
+        qsub $nameArg $logArg_download $downloadArg $MSLSP_BASE_DIR/SCC/runDownloadHLS.sh $tile $baseDir $imgStartYr $imgEndYr
     done < $tileList
 
     while read -r tile
@@ -65,7 +69,7 @@ then
         nameArg="-N R_${tile}"
         logArg="-o ${logDir}Run_${tile}_${jobTime}.txt"
         holdArg="-hold_jid DL_${tile}"
-        qsub $nameArg $logArg $nodeArgs $holdArg /projectnb/modislc/users/aliceni/MSLSP/SCC/MSLSP_runTile_SCC.sh $tile $paramName $jobTime
+        qsub $nameArg $logArg $nodeArgs $holdArg $MSLSP_BASE_DIR/SCC/MSLSP_runTile_SCC.sh $tile $paramName $jobTime
     done < $tileList
 elif [ $(jq .setup.downloadImagery $parameters ) == true ] && [ $(jq .SCC.runS10 $parameters ) == true ]
 then
@@ -76,7 +80,7 @@ then
         downloadArg="-l download"
         imgStartYr=$(( $( jq .setup.imgStartYr $parameters ) - 1 ))
         imgEndYr=$(( $( jq .setup.imgEndYr $parameters ) + 1 ))
-        qsub $nameArg $logArg_download $downloadArg /projectnb/modislc/users/aliceni/MSLSP/S10_scripts/runDownloadS10.sh $tile $baseDir $imgStartYr $imgEndYr $tileJsonDir
+        qsub $nameArg $logArg_download $downloadArg $MSLSP_BASE_DIR/S10_scripts/runDownloadS10.sh $tile $baseDir $imgStartYr $imgEndYr $tileJsonDir
     done < $tileList
     
     while read -r tile
@@ -86,7 +90,7 @@ then
       nameArg="-N R_${tile}"
       logArg="-o ${logDir}Run_${tile}_${jobTime}.txt"
       holdArg="-hold_jid DL_S10_${tile}"
-      qsub $nameArg $logArg $nodeArgs $holdArg /projectnb/modislc/users/aliceni/MSLSP/SCC/MSLSP_runTile_SCC.sh $tile $paramName $jobTime
+      qsub $nameArg $logArg $nodeArgs $holdArg $MSLSP_BASE_DIR/SCC/MSLSP_runTile_SCC.sh $tile $paramName $jobTime
     done < $tileList
 else
     while read -r tile
@@ -95,7 +99,7 @@ else
         paramName="${tileDir}parameters_${jobTime}.json"
         nameArg="-N R_${tile}"
         logArg="-o ${logDir}Run_${tile}_${jobTime}.txt"
-        qsub $nameArg $logArg $nodeArgs /projectnb/modislc/users/aliceni/MSLSP/SCC/MSLSP_runTile_SCC.sh $tile $paramName $jobTime
+        qsub $nameArg $logArg $nodeArgs $MSLSP_BASE_DIR/SCC/MSLSP_runTile_SCC.sh $tile $paramName $jobTime
     done < $tileList
 fi
 

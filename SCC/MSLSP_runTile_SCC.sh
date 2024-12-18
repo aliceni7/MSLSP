@@ -1,6 +1,10 @@
 #!/bin/bash -l
 #$ -j y
 
+# Get the base directory path based on the location of this launching script.
+MSLSP_BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. &> /dev/null && pwd )"
+echo "MSLSP Base directory: $MSLSP_BASE_DIR"
+
 #SCC
 #Load packages
 #######
@@ -21,11 +25,11 @@ parameters=$2
 timeStamp=$3
 
 
-rScript=$( jq --raw-output .SCC.rScript $parameters )
-dataDir=$( jq --raw-output .SCC.dataDir $parameters )
-workDir=$( jq --raw-output .SCC.workDir $parameters )
-imgDir=$( jq --raw-output .dirs.imgDir $parameters )
-logDir=$( jq --raw-output .SCC.logDir $parameters ) 
+rScript=$MSLSP_BASE_DIR/$( jq --raw-output .SCC.rScript $parameters )
+dataDir=$MSLSP_BASE_DIR/$( jq --raw-output .SCC.dataDir $parameters )
+workDir=$MSLSP_BASE_DIR/$( jq --raw-output .SCC.workDir $parameters )
+imgDir=$MSLSP_BASE_DIR/$( jq --raw-output .dirs.imgDir $parameters )
+logDir=$MSLSP_BASE_DIR/$( jq --raw-output .SCC.logDir $parameters ) 
 numCores=$( jq --raw-output .SCC.numCores $parameters ) 
 
 
