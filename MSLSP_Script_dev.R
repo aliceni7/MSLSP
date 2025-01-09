@@ -6,6 +6,12 @@
 
 start_time <- Sys.time()
 
+# Checking if gdalwarp is available
+ret <- system2("which", "gdalwarp")
+if(ret != 0){
+  stop("gdalwarp is not available. Stopping execution.")
+}
+
 
 
 #Load required libraries
@@ -40,8 +46,6 @@ print('Start processing')
 print('')
 print('')
 
-
-
 #Read in arguments
 args <- commandArgs(trailingOnly=T)
 tile <- args[1]
@@ -49,13 +53,20 @@ jsonFile <- args[2]
 runLog <- args[3]
 errorLog <- args[4]
 
+# If set to TRUE, this will not silent errors when try{} is executed and will terminate 
+# the program when an error is encountered.
+# For production set to FALSE to skip over errors and continue processing.
+# This will also run some select %dopar% loops in serial to better debug issues.
+DEBUG=TRUE
 
-# tile <- '13RFN'
-# jsonFile <- '/projectnb/modislc/users/sjstone/MSLSP/output/13RFN/parameters_2024_03_06_11_17_05.json'
-# # jsonFile <- '/projectnb/modislc/users/sjstone/MSLSP/output/13RFN/parameters_2024_03_06_11_17_05.json'
-# # runLog <- '/projectnb/modislc/users/sjstone/MSLSP/runLogs/18TYN_instanceInfo_2024_04_30_14_11_56.txt'
-# errorLog <- '/projectnb/modislc/users/sjstone/MSLSP/runLogs/13RFN_errorLog_2024_03_05_14_16_38.txt'
 
+if (DEBUG == TRUE) {
+  tile <- '12RVV'
+  jsonFile <- '/projectnb/dvm-rcs/client/aliceni/MSLSP/output/S10/12RVV/parameters_2025_01_07_13_34_24.json'
+  runLog <- '/projectnb/dvm-rcs/client/aliceni/MSLSP/runLogs/12RVV_instanceInfo_2025_01_07_13_34_24.txt'
+  errorLog <- '/projectnb/dvm-rcs/client/aliceni/MSLSP/runLogs/12RVV_errorLog_2025_01_07_13_34_24.txt'
+}
+ 
 
 #Get default parameters
 params <- fromJSON(file=jsonFile)
@@ -149,13 +160,27 @@ if(params$setup$AWS_or_SCC == "SCC" & params$SCC$runS10) {
     # re-sampling the Sentinel-2 mask to 10m
     newMask <- gsub('20m', '10m', img)
     if(file.exists(newMask) == FALSE){
-      run <- try(
-        {
-          system2("gdalwarp", paste("-overwrite -r near -ts 1098 1098 -of GTiff", img, newMask),
-          stdout=T,
-          stderr=T)
-        },
-        silent=FALSE)
+
+      cmd <- "gdalwarp"
+      args <- paste("-overwrite -r near -ts 1098 1098 -of GTiff", img, newMask)
+
+      if (DEBUG == FALSE){
+        run <- try(
+          {
+            system2(cmd, args, stdout=T,stderr=T)
+          },
+          silent=TRUE)
+
+        if (inherits(run, 'try-error')) {
+          cat(paste('gdalwarp: Error for', img,'\n'), file=errorLog, append=T)
+        }
+
+      } else {
+        ret <- system2(cmd, args)
+        if(ret != 0){
+          stop(paste("Error running command:\n", cmd, args, "\n Stopping execution."))
+        }
+      }
     }
     
   }
@@ -249,11 +274,20 @@ remove(water)
 if (params$setup$preprocessImagery) {  
   
   #Apply mask and write out chunked images. 
-  imgLog <- foreach(j=1:length(imgList),.combine=c) %dopar% {
-    log <- try({ApplyMask_QA(imgList[j], tile, waterMask, chunkStart, chunkEnd, params)},silent=T)
-    if (inherits(log, 'try-error')) {cat(paste('ApplyMask_QA: Error for', imgList[j],'\n'), file=errorLog, append=T)}  #If there's an error, keep going, but write to error log
-    #log <- ApplyMask_QA(imgList[j], tile, waterMask, chunkStart, chunkEnd, params)
-    #cat(paste(log, file=errorLog, append=T))
+  # If DEBUG is FALSE then execute in parallel, otherwise execute in serial
+  if(DEBUG == FALSE){
+
+    imgLog <- foreach(j=1:length(imgList),.combine=c) %dopar% {
+      log <- try({ApplyMask_QA(imgList[j], tile, waterMask, chunkStart, chunkEnd, params)},silent=TRUE)
+      if (inherits(log, 'try-error')) {
+        cat(paste('ApplyMask_QA: Error for', imgList[j],'\n'), file=errorLog, append=T)
+      } #If there's an error, keep going, but write to error log
+    }
+
+  } else {
+    for (j in 1:length(imgList)){
+      ApplyMask_QA(imgList[j], tile, waterMask, chunkStart, chunkEnd, params, DEBUG=DEBUG)
+    }
   }
 
   #Topographic Correction of images
@@ -299,7 +333,7 @@ if (params$setup$preprocessImagery) {
         
         #Calculate the VIs by reading in image chunks, and calcuating percentiles
         indexImg <- foreach(j=1:numChunks,.combine=rbind) %dopar% {
-          getIndexQuantile(j, numPixPerChunk[j], yrPull, errorLog, params)}
+          getIndexQuantile(j, numPixPerChunk[j], yrPull, errorLog, params, DEBUG=DEBUG)}
         
         #Convert VIs to z-scores prior to kmeans
         for (i in 1:dim(indexImg)[2]) {
@@ -316,18 +350,18 @@ if (params$setup$preprocessImagery) {
         groups[is.na(groups) | is.na(slopeVals) | is.na(aspectVals)]  <- 0    #Assign zero value to groups if slope, aspect, or group is NA
         
         #Now that we have kmeans classes, run the topographic correction function. 
-        imgLog <- foreach(j=1:length(subList),.combine=c) %dopar% {
-          log <- try({runTopoCorrection(subList[j], groups, slopeVals, aspectVals, chunkStart,chunkEnd, errorLog, params)}, silent=T)
-          if (inherits(log, 'try-error')) {cat(paste('RunTopoCorrection: Error for', subList[j],'\n'), file=errorLog, append=T)}
+        if(DEBUG == FALSE){
+          imgLog <- foreach(j=1:length(subList),.combine=c) %dopar% {
+            log <- try({runTopoCorrection(subList[j], groups, slopeVals, aspectVals, chunkStart,chunkEnd, errorLog, params)}, silent=TRUE)
+            if (inherits(log, 'try-error')) {
+              cat(paste('RunTopoCorrection: Error for', subList[j],'\n'), file=errorLog, append=T)
+            }
+          } 
+        } else {
+          for(j in 1:length(subList)){
+            runTopoCorrection(subList[j], groups, slopeVals, aspectVals, chunkStart,chunkEnd, errorLog, params, DEBUG=DEBUG)
+          }
         }
-        
-        # # testing out without the try statement and without running in parallel to see why certain images are failing
-        # imgLog <- foreach(j=1:length(subList),.combine=c) %do% {
-        #   log <- runTopoCorrection(subList[j], groups, slopeVals, aspectVals, chunkStart,chunkEnd, errorLog, params)
-        #   # log <- try({runTopoCorrection(subList[j], groups, slopeVals, aspectVals, chunkStart,chunkEnd, errorLog, params)}, silent=T)
-        #   # if (inherits(log, 'try-error')) {cat(paste('RunTopoCorrection: Error for', subList[j],'\n'), file=errorLog, append=T)} 
-        # }
-        
       }
     }
   }
@@ -350,14 +384,26 @@ registerDoMC(cores=params$setup$numCores)
 #####################################################
 if (params$setup$runPhenology) {   
   #Run phenology code for each image chunk
-  imgLog <- foreach(j=1:numChunks) %dopar% {
-    log <- try({runPhenoChunk(j, numPixPerChunk[j], imgYrs, phenYrs, errorLog, params)},silent=T)
-    if (inherits(log, 'try-error')) {cat(paste('RunPhenoChunk: Error for chunk', j,'\n'), file=errorLog, append=T)}
+
+    #Apply mask and write out chunked images. 
+  # If DEBUG is FALSE then execute in parallel, otherwise execute in serial
+  if(DEBUG == FALSE){
+    imgLog <- foreach(j=1:numChunks) %dopar% {
+      log <- try({runPhenoChunk(j, numPixPerChunk[j], imgYrs, phenYrs, errorLog, params)},silent=TRUE)
+      if (inherits(log, 'try-error')) {
+        cat(paste('RunPhenoChunk: Error for chunk', j,'\n'), file=errorLog, append=T)
+      }
+    }
+  } else {
+    for(j in 1:numChunks){
+      runPhenoChunk(j, numPixPerChunk[j], imgYrs, phenYrs, errorLog, params, DEBUG=DEBUG)
+    }
   }
   
   
   #Loop through the years processed and output netcdf files
   yrs <- phenStartYr:phenEndYr  
+  
   log <- foreach(yr = yrs) %dopar% { 
     productFile  <- paste0(params$dirs$phenDir,'MSLSP_',tile,'_',yr,'.nc') 
     qaFile  <- paste0(params$dirs$phenDir,'MSLSP_',tile,'_',yr,'_Extended_QA.nc') 
